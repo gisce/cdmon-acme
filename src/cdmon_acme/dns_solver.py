@@ -24,26 +24,51 @@ def _host_from_fqdn(fqdn: str, zone: str) -> str:
     raise ValueError(f"FQDN {fqdn} does not belong to zone {zone}")
 
 
-def create_txt_record(api_key: str, fqdn: str, value: str, ttl: int = 60) -> None:
+def create_txt_record(
+    api_key: str,
+    fqdn: str,
+    value: str,
+    ttl: int = 60,
+    retries: int = 3,
+) -> None:
     zone = _zone_from_fqdn(fqdn)
     host = _host_from_fqdn(fqdn, zone)
-    with CdmonDomainsClient(api_key=api_key) as client:
-        client.create_dns_record(
-            zone,
-            {
-                "host": host,
-                "type": "TXT",
-                "ttl": ttl,
-                "destination": value,
-            },
-        )
+    _last_error: Exception | None = None
+
+    for attempt in range(1, retries + 1):
+        try:
+            with CdmonDomainsClient(api_key=api_key) as client:
+                client.create_dns_record(
+                    zone,
+                    {
+                        "host": host,
+                        "type": "TXT",
+                        "ttl": ttl,
+                        "destination": value,
+                    },
+                )
+            return
+        except Exception as exc:
+            _last_error = exc
+            if attempt < retries:
+                time.sleep(attempt * 2)
+
+    if _last_error is not None:
+        raise _last_error
 
 
-def delete_txt_record(api_key: str, fqdn: str) -> None:
+def delete_txt_record(api_key: str, fqdn: str, retries: int = 3) -> None:
     zone = _zone_from_fqdn(fqdn)
     host = _host_from_fqdn(fqdn, zone)
-    with CdmonDomainsClient(api_key=api_key) as client:
-        client.delete_dns_record(zone, host=host, type_="TXT")
+
+    for attempt in range(1, retries + 1):
+        try:
+            with CdmonDomainsClient(api_key=api_key) as client:
+                client.delete_dns_record(zone, host=host, type_="TXT")
+            return
+        except Exception:
+            if attempt < retries:
+                time.sleep(attempt * 2)
 
 
 def wait_for_txt(

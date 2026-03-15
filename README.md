@@ -8,6 +8,9 @@ Issue Let's Encrypt certificates (including wildcard) using cdmon DNS (`dns-01`)
 - Fully Python implementation
 - DNS TXT automation on cdmon
 - DNS propagation wait loop
+- Retries/backoff for DNS record create/delete
+- Lock file to prevent parallel issuance
+- Commands: `issue` and `renew`
 - Outputs: `cert.pem`, `chain.pem`, `fullchain.pem`, private key
 
 ## Install
@@ -35,6 +38,14 @@ cdmon-acme issue \
   --wildcard \
   --email admin@example.com \
   --out ./certs
+
+# Renew (same flow, reusable keys + lock)
+cdmon-acme renew \
+  --domain example.com \
+  --wildcard \
+  --email admin@example.com \
+  --out ./certs \
+  --lock-file ./.state/issue.lock
 ```
 
 ## Security notes
@@ -51,8 +62,8 @@ cdmon-acme issue \
 
 ## Status
 
-MVP ready. Next recommended steps:
+MVP+ ready. Next recommended steps:
 
-- Add renew subcommand
-- Add lockfile to prevent parallel issuance
 - Add integration tests against LE staging + disposable domain
+- Add optional post-hook (e.g. nginx reload)
+- Add cert expiry inspection command

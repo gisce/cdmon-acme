@@ -13,6 +13,7 @@ class IssueRequest:
     directory_url: str
     account_key_path: Path
     cert_key_path: Path
+    lock_path: Path
     propagation_timeout: int = 180
     propagation_interval: int = 10
 

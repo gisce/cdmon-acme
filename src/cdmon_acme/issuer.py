@@ -11,6 +11,7 @@ from cryptography.x509.oid import NameOID
 from josepy import JWKRSA
 
 from .dns_solver import create_txt_record, delete_txt_record, wait_for_txt
+from .lock import file_lock
 from .models import IssueRequest, IssuedCertificate
 
 
@@ -45,6 +46,11 @@ def _generate_csr(private_key: rsa.RSAPrivateKey, domains: Iterable[str]) -> byt
 
 
 def issue_certificate(api_key: str, request: IssueRequest) -> IssuedCertificate:
+    with file_lock(request.lock_path):
+        return _issue_certificate_unlocked(api_key, request)
+
+
+def _issue_certificate_unlocked(api_key: str, request: IssueRequest) -> IssuedCertificate:
     account_key = _load_or_create_rsa_key(request.account_key_path)
     cert_key = _load_or_create_rsa_key(request.cert_key_path)
 
@@ -60,7 +66,6 @@ def issue_certificate(api_key: str, request: IssueRequest) -> IssuedCertificate:
     try:
         acme_client.new_account(new_account)
     except messages.Error:
-        # account likely exists already for this key
         pass
 
     identifiers = [request.domain]
@@ -98,7 +103,6 @@ def issue_certificate(api_key: str, request: IssueRequest) -> IssuedCertificate:
             acme_client.answer_challenge(dns01, response)
 
         finalized_order = acme_client.poll_and_finalize(order)
-
     finally:
         for fqdn, _ in txt_records:
             try:
@@ -114,7 +118,11 @@ def issue_certificate(api_key: str, request: IssueRequest) -> IssuedCertificate:
     fullchain_pem = finalized_order.fullchain_pem
     fullchain_path.write_text(fullchain_pem)
 
-    certs = [chunk + "-----END CERTIFICATE-----\n" for chunk in fullchain_pem.split("-----END CERTIFICATE-----") if "BEGIN CERTIFICATE" in chunk]
+    certs = [
+        chunk + "-----END CERTIFICATE-----\n"
+        for chunk in fullchain_pem.split("-----END CERTIFICATE-----")
+        if "BEGIN CERTIFICATE" in chunk
+    ]
     if certs:
         cert_path.write_text(certs[0])
         chain_path.write_text("".join(certs[1:]))
