@@ -2,8 +2,11 @@ from __future__ import annotations
 
 import argparse
 import os
+import shlex
+import subprocess
 from pathlib import Path
 
+from .cert_info import inspect_certificate
 from .issuer import issue_certificate
 from .models import IssueRequest
 
@@ -23,6 +26,11 @@ def _add_common_issue_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--lock-file", default="./.state/issue.lock")
     parser.add_argument("--propagation-timeout", type=int, default=240)
     parser.add_argument("--propagation-interval", type=int, default=10)
+    parser.add_argument(
+        "--post-hook",
+        default=None,
+        help="Optional shell command to run after successful issue/renew (e.g. 'systemctl reload nginx')",
+    )
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -35,7 +43,14 @@ def build_parser() -> argparse.ArgumentParser:
     renew = sub.add_parser("renew", help="Renew a certificate (same flow as issue)")
     _add_common_issue_args(renew)
 
+    inspect = sub.add_parser("inspect", help="Inspect an existing certificate PEM")
+    inspect.add_argument("--cert", default="./certs/fullchain.pem")
+
     return p
+
+
+def _run_post_hook(command: str) -> None:
+    subprocess.run(command, shell=True, check=True)
 
 
 def _run_issue_like(args: argparse.Namespace, api_key: str) -> int:
@@ -60,11 +75,29 @@ def _run_issue_like(args: argparse.Namespace, api_key: str) -> int:
     print(f" chain:     {result.chain_pem_path}")
     print(f" fullchain: {result.fullchain_pem_path}")
     print(f" key:       {result.private_key_path}")
+
+    if args.post_hook:
+        print(f"Running post-hook: {shlex.quote(args.post_hook)}")
+        _run_post_hook(args.post_hook)
+
+    return 0
+
+
+def _run_inspect(args: argparse.Namespace) -> int:
+    info = inspect_certificate(Path(args.cert))
+    print(f"subject:    {info.subject}")
+    print(f"issuer:     {info.issuer}")
+    print(f"not_before: {info.not_before.isoformat()}")
+    print(f"not_after:  {info.not_after.isoformat()}")
+    print(f"days_left:  {info.days_left}")
     return 0
 
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+
+    if args.cmd == "inspect":
+        return _run_inspect(args)
 
     api_key = os.getenv("CDMON_API_KEY")
     if not api_key:

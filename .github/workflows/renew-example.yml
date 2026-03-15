@@ -1,0 +1,30 @@
+name: Renew certificate (example)
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 3 * * 1" # Mondays 03:00 UTC
+
+jobs:
+  renew:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install .
+      - name: Renew wildcard cert
+        env:
+          CDMON_API_KEY: ${{ secrets.CDMON_API_KEY }}
+          ACME_EMAIL: ${{ secrets.ACME_EMAIL }}
+        run: |
+          cdmon-acme renew \
+            --domain example.com \
+            --wildcard \
+            --email "$ACME_EMAIL" \
+            --out ./certs \
+            --lock-file ./.state/issue.lock
