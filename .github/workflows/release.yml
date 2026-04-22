@@ -5,6 +5,10 @@ on:
     branches:
       - main
 
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
 permissions:
   contents: write
   issues: write
@@ -28,21 +32,37 @@ jobs:
           pip install -e .[dev]
           pip install python-semantic-release==10.5.3 build==1.3.0 twine==6.1.0
 
+      - name: Resolve PyPI token
+        run: |
+          if [ -n "${{ secrets.PYPI_TOKEN }}" ]; then
+            echo "PYPI_TOKEN=${{ secrets.PYPI_TOKEN }}" >> "$GITHUB_ENV"
+            echo "HAS_PYPI_TOKEN=true" >> "$GITHUB_ENV"
+          elif [ -n "${{ secrets.PYPI_MASTER_TOKEN }}" ]; then
+            echo "PYPI_TOKEN=${{ secrets.PYPI_MASTER_TOKEN }}" >> "$GITHUB_ENV"
+            echo "HAS_PYPI_TOKEN=true" >> "$GITHUB_ENV"
+          else
+            echo "HAS_PYPI_TOKEN=false" >> "$GITHUB_ENV"
+          fi
+
       - name: Validate project
         run: |
           ruff check .
           pytest
 
-      - name: Run Python Semantic Release
+      - name: Run Python Semantic Release version step
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PYPI_TOKEN: ${{ secrets.PYPI_TOKEN }}
-          PYPI_MASTER_TOKEN: ${{ secrets.PYPI_MASTER_TOKEN }}
-        run: |
-          export PYPI_TOKEN="${PYPI_TOKEN:-${PYPI_MASTER_TOKEN:-}}"
-          semantic-release version
-          if [ -n "${PYPI_TOKEN}" ]; then
-            semantic-release publish
-          else
-            echo "No PyPI token configured; skipping PyPI publish"
-          fi
+        run: semantic-release version --no-vcs-release
+
+      - name: Publish GitHub Release
+        if: ${{ env.HAS_PYPI_TOKEN == 'false' }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: semantic-release publish
+
+      - name: Publish release and PyPI package
+        if: ${{ env.HAS_PYPI_TOKEN == 'true' }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PYPI_TOKEN: ${{ env.PYPI_TOKEN }}
+        run: semantic-release publish

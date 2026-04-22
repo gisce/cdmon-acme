@@ -97,9 +97,10 @@ Conventional Commits are only the input convention used to determine the version
   - update `pyproject.toml`
   - create the release commit and tag
   - publish the GitHub Release
+- the workflow always creates the Git tag and GitHub Release when a release is warranted
 - if `PYPI_TOKEN` is defined in repository secrets, the workflow also publishes to PyPI
 - if `PYPI_TOKEN` is not defined but `PYPI_MASTER_TOKEN` exists, the workflow falls back to that token for PyPI publication
-- if neither token exists, the workflow still creates the Git tag and GitHub Release and skips the PyPI upload
+- if neither token exists, the workflow skips the PyPI upload but still publishes the GitHub Release
 
 ### Commit conventions
 

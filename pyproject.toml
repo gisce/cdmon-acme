@@ -38,7 +38,7 @@ type = "github"
 
 [tool.semantic_release.publish]
 dist_glob_patterns = ["dist/*"]
-upload_to_pypi = true
+upload_to_pypi = false
 
 [project.scripts]
 cdmon-acme = "cdmon_acme.cli:main"
