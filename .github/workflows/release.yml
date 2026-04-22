@@ -5,10 +5,6 @@ on:
     branches:
       - main
 
-concurrency:
-  group: release-${{ github.ref }}
-  cancel-in-progress: false
-
 permissions:
   contents: write
   issues: write
@@ -32,37 +28,33 @@ jobs:
           pip install -e .[dev]
           pip install python-semantic-release==10.5.3 build==1.3.0 twine==6.1.0
 
-      - name: Resolve PyPI token
-        run: |
-          if [ -n "${{ secrets.PYPI_TOKEN }}" ]; then
-            echo "PYPI_TOKEN=${{ secrets.PYPI_TOKEN }}" >> "$GITHUB_ENV"
-            echo "HAS_PYPI_TOKEN=true" >> "$GITHUB_ENV"
-          elif [ -n "${{ secrets.PYPI_MASTER_TOKEN }}" ]; then
-            echo "PYPI_TOKEN=${{ secrets.PYPI_MASTER_TOKEN }}" >> "$GITHUB_ENV"
-            echo "HAS_PYPI_TOKEN=true" >> "$GITHUB_ENV"
-          else
-            echo "HAS_PYPI_TOKEN=false" >> "$GITHUB_ENV"
-          fi
-
       - name: Validate project
         run: |
           ruff check .
           pytest
 
-      - name: Run Python Semantic Release version step
+      - name: Run Python Semantic Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: semantic-release version --no-vcs-release
-
-      - name: Publish GitHub Release
-        if: ${{ env.HAS_PYPI_TOKEN == 'false' }}
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: semantic-release publish
-
-      - name: Publish release and PyPI package
-        if: ${{ env.HAS_PYPI_TOKEN == 'true' }}
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PYPI_TOKEN: ${{ env.PYPI_TOKEN }}
-        run: semantic-release publish
+          PYPI_TOKEN: ${{ secrets.PYPI_TOKEN }}
+          PYPI_MASTER_TOKEN: ${{ secrets.PYPI_MASTER_TOKEN }}
+        run: |
+          export PYPI_TOKEN="${PYPI_TOKEN:-${PYPI_MASTER_TOKEN:-}}"
+          if [ -n "${PYPI_TOKEN}" ]; then
+            echo "::add-mask::${PYPI_TOKEN}"
+          fi
+          semantic-release version
+          python -m build
+          mapfile -t DIST_FILES < <(find dist -maxdepth 1 -type f \( -name "*.whl" -o -name "*.tar.gz" \) 2>/dev/null || true)
+          if [ "${#DIST_FILES[@]}" -gt 0 ]; then
+            semantic-release publish
+            if [ -n "${PYPI_TOKEN}" ]; then
+              export TWINE_USERNAME=__token__
+              export TWINE_PASSWORD="${PYPI_TOKEN}"
+              twine upload --non-interactive --skip-existing "${DIST_FILES[@]}"
+            else
+              echo "No PyPI token configured; skipping PyPI publish"
+            fi
+          else
+            echo "No distributions found in dist/; skipping publish steps"
+          fi
