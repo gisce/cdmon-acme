@@ -73,6 +73,56 @@ Add repository secrets:
 
 Then use a scheduled workflow (example in `.github/workflows/renew-example.yml`).
 
+## Releases
+
+This repository supports automatic releases from `main` using **Python Semantic Release** and Conventional Commits.
+
+### Why this approach
+
+This is a Python package, so the release automation is Python-native:
+
+- no `package.json`
+- versioning is configured in `pyproject.toml`
+- the workflow uses `python-semantic-release`, `build`, and optional PyPI publication
+
+Conventional Commits are only the input convention used to determine the version bump.
+
+### How it works
+
+- merge changes into `main`
+- GitHub Actions runs validation (`ruff check .` and `pytest`)
+- `python-semantic-release` inspects commit messages since the last tag
+- if a release is warranted, it will:
+  - determine the next version
+  - update `pyproject.toml`
+  - create the release commit and tag
+  - publish the GitHub Release
+- the workflow always creates the Git tag and GitHub Release when a release is warranted
+- if `PYPI_TOKEN` is defined in repository secrets, the workflow also publishes to PyPI
+- if `PYPI_TOKEN` is not defined but `PYPI_MASTER_TOKEN` exists, the workflow falls back to that token for PyPI publication
+- if neither token exists, the workflow skips the PyPI upload but still publishes the GitHub Release
+
+### Commit conventions
+
+Use Conventional Commits so release automation can infer version bumps:
+
+- `fix:` -> patch release
+- `feat:` -> minor release
+- `feat!:` or any commit with `BREAKING CHANGE:` -> major release
+- `docs:`, `test:`, `chore:` -> no release by default
+
+Example:
+
+```bash
+git commit -m "fix: correct TXT record handling for cdmon DNS challenge"
+```
+
+### Notes
+
+- The release workflow only runs on pushes to `main`.
+- The repository must allow GitHub Actions to push release commits and tags using `GITHUB_TOKEN`.
+- If branch protection is strict, make sure it still permits the release workflow to push the generated release commit.
+
 ## Status
 
 MVP+ ready. Next recommended steps:

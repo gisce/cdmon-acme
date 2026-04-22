@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+from collections.abc import Iterable
+from contextlib import suppress
 from pathlib import Path
-from typing import Iterable
 
-from acme import client, challenges, messages
+from acme import challenges, client, messages
 from cryptography import x509
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
@@ -12,7 +13,7 @@ from josepy import JWKRSA
 
 from .dns_solver import create_txt_record, delete_txt_record, wait_for_txt
 from .lock import file_lock
-from .models import IssueRequest, IssuedCertificate
+from .models import IssuedCertificate, IssueRequest
 
 
 def _load_or_create_rsa_key(path: Path, bits: int = 4096) -> rsa.RSAPrivateKey:
@@ -39,7 +40,10 @@ def _generate_csr(private_key: rsa.RSAPrivateKey, domains: Iterable[str]) -> byt
     csr = (
         x509.CertificateSigningRequestBuilder()
         .subject_name(x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, domain_list[0])]))
-        .add_extension(x509.SubjectAlternativeName([x509.DNSName(d) for d in domain_list]), critical=False)
+        .add_extension(
+            x509.SubjectAlternativeName([x509.DNSName(d) for d in domain_list]),
+            critical=False,
+        )
         .sign(private_key, hashes.SHA256())
     )
     return csr.public_bytes(serialization.Encoding.PEM)
@@ -63,10 +67,8 @@ def _issue_certificate_unlocked(api_key: str, request: IssueRequest) -> IssuedCe
         email=request.email,
         terms_of_service_agreed=True,
     )
-    try:
+    with suppress(messages.Error):
         acme_client.new_account(new_account)
-    except messages.Error:
-        pass
 
     identifiers = [request.domain]
     if request.wildcard:
@@ -105,10 +107,8 @@ def _issue_certificate_unlocked(api_key: str, request: IssueRequest) -> IssuedCe
         finalized_order = acme_client.poll_and_finalize(order)
     finally:
         for fqdn, _ in txt_records:
-            try:
+            with suppress(Exception):
                 delete_txt_record(api_key, fqdn)
-            except Exception:
-                pass
 
     request.out_dir.mkdir(parents=True, exist_ok=True)
     fullchain_path = request.out_dir / "fullchain.pem"

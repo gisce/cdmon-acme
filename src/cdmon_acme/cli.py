@@ -29,12 +29,18 @@ def _add_common_issue_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--post-hook",
         default=None,
-        help="Optional shell command to run after successful issue/renew (e.g. 'systemctl reload nginx')",
+        help=(
+            "Optional shell command to run after successful issue/renew "
+            "(e.g. 'systemctl reload nginx')"
+        ),
     )
 
 
 def build_parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(prog="cdmon-acme", description="Issue Let's Encrypt certs via cdmon DNS")
+    p = argparse.ArgumentParser(
+        prog="cdmon-acme",
+        description="Issue Let's Encrypt certs via cdmon DNS",
+    )
     sub = p.add_subparsers(dest="cmd", required=True)
 
     issue = sub.add_parser("issue", help="Issue a certificate")

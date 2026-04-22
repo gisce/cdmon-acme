@@ -1,0 +1,60 @@
+name: Release
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .[dev]
+          pip install python-semantic-release==10.5.3 build==1.3.0 twine==6.1.0
+
+      - name: Validate project
+        run: |
+          ruff check .
+          pytest
+
+      - name: Run Python Semantic Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PYPI_TOKEN: ${{ secrets.PYPI_TOKEN }}
+          PYPI_MASTER_TOKEN: ${{ secrets.PYPI_MASTER_TOKEN }}
+        run: |
+          export PYPI_TOKEN="${PYPI_TOKEN:-${PYPI_MASTER_TOKEN:-}}"
+          if [ -n "${PYPI_TOKEN}" ]; then
+            echo "::add-mask::${PYPI_TOKEN}"
+          fi
+          semantic-release version
+          python -m build
+          mapfile -t DIST_FILES < <(find dist -maxdepth 1 -type f \( -name "*.whl" -o -name "*.tar.gz" \) 2>/dev/null || true)
+          if [ "${#DIST_FILES[@]}" -gt 0 ]; then
+            semantic-release publish
+            if [ -n "${PYPI_TOKEN}" ]; then
+              export TWINE_USERNAME=__token__
+              export TWINE_PASSWORD="${PYPI_TOKEN}"
+              twine upload --non-interactive --skip-existing "${DIST_FILES[@]}"
+            else
+              echo "No PyPI token configured; skipping PyPI publish"
+            fi
+          else
+            echo "No distributions found in dist/; skipping publish steps"
+          fi

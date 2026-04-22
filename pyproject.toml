@@ -21,6 +21,25 @@ dependencies = [
 [project.optional-dependencies]
 dev = ["pytest>=8.0", "ruff>=0.8", "mypy>=1.11"]
 
+[tool.semantic_release]
+branch = "main"
+version_toml = ["pyproject.toml:project.version"]
+version_variables = []
+build_command = "python -m build"
+dist_path = "dist/"
+upload_to_vcs_release = true
+major_on_zero = false
+commit_message = "chore(release): {version}"
+commit_parser = "conventional"
+
+[tool.semantic_release.remote]
+name = "origin"
+type = "github"
+
+[tool.semantic_release.publish]
+dist_glob_patterns = ["dist/*"]
+upload_to_pypi = false
+
 [project.scripts]
 cdmon-acme = "cdmon_acme.cli:main"
 
