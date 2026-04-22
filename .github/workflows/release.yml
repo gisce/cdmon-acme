@@ -7,8 +7,6 @@ on:
 
 permissions:
   contents: write
-  issues: write
-  pull-requests: write
 
 jobs:
   release:
@@ -43,18 +41,24 @@ jobs:
           if [ -n "${PYPI_TOKEN}" ]; then
             echo "::add-mask::${PYPI_TOKEN}"
           fi
+          BEFORE_TAGS="$(git tag --points-at HEAD)"
           semantic-release version
-          python -m build
-          mapfile -t DIST_FILES < <(find dist -maxdepth 1 -type f \( -name "*.whl" -o -name "*.tar.gz" \) 2>/dev/null || true)
-          if [ "${#DIST_FILES[@]}" -gt 0 ]; then
-            semantic-release publish
-            if [ -n "${PYPI_TOKEN}" ]; then
-              export TWINE_USERNAME=__token__
-              export TWINE_PASSWORD="${PYPI_TOKEN}"
-              twine upload --non-interactive --skip-existing "${DIST_FILES[@]}"
+          AFTER_TAGS="$(git tag --points-at HEAD)"
+          if [ -n "${AFTER_TAGS}" ] && [ "${AFTER_TAGS}" != "${BEFORE_TAGS}" ]; then
+            python -m build
+            mapfile -t DIST_FILES < <(find dist -maxdepth 1 -type f \( -name "*.whl" -o -name "*.tar.gz" \) 2>/dev/null || true)
+            if [ "${#DIST_FILES[@]}" -gt 0 ]; then
+              semantic-release publish
+              if [ -n "${PYPI_TOKEN}" ]; then
+                export TWINE_USERNAME=__token__
+                export TWINE_PASSWORD="${PYPI_TOKEN}"
+                twine upload --non-interactive --skip-existing "${DIST_FILES[@]}"
+              else
+                echo "No PyPI token configured; skipping PyPI publish"
+              fi
             else
-              echo "No PyPI token configured; skipping PyPI publish"
+              echo "No distributions found in dist/; skipping publish steps"
             fi
           else
-            echo "No distributions found in dist/; skipping publish steps"
+            echo "semantic-release did not create a new tag on HEAD; skipping build and publish steps"
           fi
